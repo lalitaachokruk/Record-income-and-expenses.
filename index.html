@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="https://www.banhadsompan.ac.th/_files_school/86101511/data/86101511_0_20240629-000624.png" type="image/png">
+    <title>บัญชีรายรับ-รายจ่ายภายนอก (เวอร์ชันมือถือ)</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.1.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --primary-blue: #1A365D; --secondary-blue: #3182CE; --accent-red: #E53E3E;
+            --bg-body: #F7FAFC; --bg-white: #FFFFFF; --text-main: #2D3748; --text-muted: #718096;
+            --border-color: #E2E8F0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Kanit', sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg-body); color: var(--text-main); padding-bottom: 30px; font-size: 16px; }
+
+        /* ส่วนหัวเว็บไซต์ระบบมือถือ */
+        .app-header { background: var(--primary-blue); color: white; padding: 16px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 999; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .app-header img { height: 35px; }
+        .app-header h1 { font-size: 1.1rem; font-weight: 500; letter-spacing: 0.5px; }
+
+        .container { padding: 14px; width: 100%; max-width: 800px; margin: 0 auto; }
+
+        /* แผงสรุปยอดเงิน Responsive 2 คอลัมน์บนมือถือ / 4 คอลัมน์บนไอแพดและคอมพิวเตอร์ */
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; }
+        @media (min-width: 600px) { .stats-grid { grid-template-columns: repeat(4, 1fr); } }
+        
+        .stat-box { background: white; padding: 14px 10px; border-radius: 10px; border: 1px solid var(--border-color); border-left: 4px solid #3182CE; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
+        .stat-box p { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 500; }
+        .stat-box h3 { font-size: 1.25rem; color: var(--text-main); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* สไตล์การ์ดระบบ */
+        .app-card { background: var(--bg-white); border-radius: 12px; padding: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); margin-bottom: 16px; border: 1px solid var(--border-color); }
+        .app-card h3 { font-size: 1.05rem; color: var(--primary-blue); margin-bottom: 15px; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+
+        /* ฟอร์มกรอกข้อมูลขนาดใหญ่ (Mobile Friendly) */
+        .form-group { margin-bottom: 14px; text-align: left; }
+        .form-label { display: block; font-size: 0.9rem; font-weight: 500; color: var(--primary-blue); margin-bottom: 5px; }
+        .form-input { width: 100%; padding: 12px; font-size: 1rem; border: 1px solid #CBD5E0; border-radius: 8px; outline: none; background: #FAFAFA; transition: 0.2s; box-sizing: border-box; -webkit-appearance: none; }
+        .form-input:focus { background: white; border-color: var(--secondary-blue); box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1); }
+
+        .btn-submit { width: 100%; padding: 14px; background: #319795; color: white; border: none; border-radius: 8px; font-size: 1.05rem; font-weight: 500; cursor: pointer; transition: 0.2s; display: block; text-align: center; }
+        .btn-submit:active { opacity: 0.85; transform: scale(0.99); }
+        
+        .btn-delete { background: white; color: var(--accent-red); border: 1px solid var(--accent-red); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: 'Kanit'; font-size: 0.8rem; }
+        .btn-delete:active { background: #FFF5F5; }
+
+        /* ตารางประวัติการทำรายการ (ปัดเลื่อนซ้าย-ขวาได้เมื่อตกจอ) */
+        .table-responsive { width: 100%; overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px; background: white; }
+        .app-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; }
+        .app-table th { background: #F7FAFC; padding: 12px 10px; border-bottom: 1px solid var(--border-color); font-weight: 500; color: var(--text-muted); white-space: nowrap; }
+        .app-table td { padding: 12px 10px; border-bottom: 1px solid var(--border-color); white-space: nowrap; vertical-align: middle; }
+    </style>
+</head>
+<body>
+
+    <header class="app-header">
+        <img src="https://www.banhadsompan.ac.th/_files_school/86101511/data/86101511_0_20240629-000624.png" alt="Logo">
+        <h1>ระบบบัญชีรายรับ-รายจ่ายภายนอก</h1>
+    </header>
+
+    <main class="container">
+        
+        <div class="stats-grid">
+            <div class="stat-box" style="border-left-color: #D69E2E;"><p>ยอดยกมา / ทุน</p><h3 id="cash-total-asset">0.00</h3></div>
+            <div class="stat-box" style="border-left-color: #38A169;"><p>รายรับภายนอก</p><h3 id="cash-total-income">0.00</h3></div>
+            <div class="stat-box" style="border-left-color: #E53E3E;"><p>รายจ่ายภายนอก</p><h3 id="cash-total-expense">0.00</h3></div>
+            <div class="stat-box" style="border-left-color: #3182CE;"><p>ยอดคงเหลือสุทธิ</p><h3 id="cash-balance">0.00</h3></div>
+        </div>
+
+        <div class="app-card">
+            <h3>📝 บันทึกรายการสมุดเงินสด</h3>
+            
+            <div class="form-group">
+                <label class="form-label">วันที่ทำรายการ</label>
+                <input type="date" id="cash-date" class="form-input">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">ประเภทบัญชี</label>
+                <select id="cash-type" class="form-input" style="background-image: none;">
+                    <option value="asset">🟡 ยอดยกมา / ทุนทรัพย์สิน</option>
+                    <option value="income">🟢 รายรับภายนอก</option>
+                    <option value="expense">🔴 รายจ่ายภายนอก</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">จำนวนเงิน (บาท)</label>
+                <input type="number" id="cash-amount" class="form-input" placeholder="0.00" inputmode="decimal">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">หมายเหตุ / รายรายละเอียดรายการ</label>
+                <input type="text" id="cash-note" class="form-input" placeholder="ระบุวัตถุประสงค์ เช่น นำเงินไปซื้อของเข้าร้าน">
+            </div>
+
+            <button class="btn-submit" onclick="window.addCashbookRecord()">💾 ลงบันทึกรายการสำเร็จ</button>
+        </div>
+
+        <div class="app-card" style="padding: 14px 8px;">
+            <h3 style="margin-left: 10px;">📜 ประวัติความเคลื่อนไหวล่าสุด</h3>
+            <div class="table-responsive">
+                <table class="app-table">
+                    <thead>
+                        <tr>
+                            <th>วันที่</th>
+                            <th>ประเภทรายการ</th>
+                            <th>จำนวนเงิน</th>
+                            <th>หมายเหตุ / รายละเอียด</th>
+                            <th>จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cashbook-list">
+                        <tr><td colspan="5" align="center">⏳ กำลังเชื่อมต่อข้อมูลระบบภายนอก...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // กำหนดค่า Firebase Config เชื่อมต่อดาต้าเบสชุดหลักตัวเดียวกันเป๊ะๆ
+        const firebaseConfig = {
+            apiKey: "AIzaSyAYaXrrNOCRbC7uDVc4tXHMDQcSiwswxoo",
+            authDomain: "school-cooperative-system.firebaseapp.com",
+            projectId: "school-cooperative-system",
+            storageBucket: "school-cooperative-system.firebasestorage.app",
+            messagingSenderId: "383328934393",
+            appId: "1:383328934393:web:0a326b1e0098b7d6cf4528"
+        };
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        const db = firebase.firestore();
+
+        // ตัวล็อกฟังก์ชันอัปเดตหน้าจอเซฟตี้แบบ Null-Check
+        const updateDOM = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = value;
+        };
+
+        // ตั้งค่าวันที่เริ่มต้นให้กับฟอร์มเป็นวันปัจจุบันในมือถือ
+        const cashDateInput = document.getElementById('cash-date');
+        if (cashDateInput) {
+            cashDateInput.value = new Date().toLocaleDateString('en-CA');
+        }
+
+        // ฟังก์ชันส่งบันทึกรายรับรายจ่ายทรัพย์สินลงคลาวด์ (Collection: cashbook)
+        window.addCashbookRecord = async function() {
+            const date = document.getElementById('cash-date').value;
+            const type = document.getElementById('cash-type').value;
+            const amount = parseFloat(document.getElementById('cash-amount').value);
+            const note = document.getElementById('cash-note').value.trim();
+
+            if(!date || isNaN(amount) || amount <= 0 || !note) {
+                return Swal.fire('ข้อมูลไม่ครบถ้วน', 'กรุณาระบุรายละเอียด หมายเหตุ และจำนวนเงินให้ถูกต้องด้วยครับ', 'warning');
+            }
+
+            try {
+                await db.collection("cashbook").add({
+                    date: date,
+                    type: type,
+                    amount: amount,
+                    note: note,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                Swal.fire({ icon: 'success', title: 'บันทึกรายการเรียบร้อย', timer: 1000, showConfirmButton: false });
+                document.getElementById('cash-amount').value = '';
+                document.getElementById('cash-note').value = '';
+            } catch(e) {
+                Swal.fire('Error', 'ไม่สามารถลงข้อมูลได้: ' + e.message, 'error');
+            }
+        };
+
+        // ฟังก์ชันลบรายการและลงบันทึกประวัติลบในคลาวด์อย่างปลอดภัย
+        window.confirmDelete = async function(collection, docId, description) {
+            const { value: adminName } = await Swal.fire({
+                title: '⚠️ ยืนยันการลบ',
+                html: `<div style="margin-bottom: 12px;">กำลังลบลำดับบัญชี: <b style="color:#E53E3E;">${description}</b></div><div style="font-size:0.9rem; color:var(--text-muted);">กรุณากรอกชื่อของคุณเพื่อบันทึกลงประวัติการแก้ไข (Audit Log)</div>`,
+                input: 'text', icon: 'warning', showCancelButton: true, confirmButtonColor: '#E53E3E', confirmButtonText: 'ลบข้อมูล',
+                inputValidator: (val) => { if (!val) return 'จำเป็นต้องพิมพ์ชื่อผู้ทำรายการครับ' }
+            });
+            
+            if (adminName) {
+                try {
+                    await db.collection(collection).doc(docId).delete();
+                    await db.collection("audit_logs").add({ action: "ลบ (บัญชีภายนอก)", collection: collection, details: description, deleted_by: adminName, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+                    Swal.fire({ title: 'ลบสำเร็จ!', icon: 'success', timer: 1000, showConfirmButton: false });
+                } catch(e) { Swal.fire('Error', 'ลบข้อมูลล้มเหลว', 'error'); }
+            }
+        };
+
+        // สถาปัตยกรรมดักจับและคำนวณเงินสด 4 กล่องเรียลไทม์ ซิงค์ข้อมูลข้ามเครื่องทันที
+        (function initRealtimeCashbook() {
+            try {
+                db.collection("cashbook").onSnapshot((snapshot) => {
+                    const tb = document.getElementById('cashbook-list');
+                    let html = '';
+                    let totalAsset = 0;
+                    let totalIncome = 0;
+                    let totalExpense = 0;
+                    let items = [];
+
+                    snapshot.forEach(doc => {
+                        const d = doc.data();
+                        let timestamp = d.timestamp ? d.timestamp.toDate() : new Date();
+                        items.push({ id: doc.id, date: d.date, type: d.type, amount: d.amount, note: d.note, timestamp: timestamp });
+                    });
+
+                    // เรียงลำดับจากรายการล่าสุดไว้ด้านบนสุดให้อ่านง่ายบนมือถือ
+                    items.sort((a, b) => b.timestamp - a.timestamp);
+
+                    items.forEach(d => {
+                        const formattedAmount = d.amount.toLocaleString(undefined, {minimumFractionDigits: 2});
+                        if (d.type === 'asset') {
+                            totalAsset += d.amount;
+                            html += `<tr><td>${d.date}</td><td style="color:#D69E2E; font-weight:600;">🟡 ยอดยกมา</td><td style="color:#D69E2E; font-weight:600;">+ ฿${formattedAmount}</td><td>${d.note}</td><td><button class="btn-delete" onclick="confirmDelete('cashbook', '${d.id}', '${d.note}')">🗑️</button></td></tr>`;
+                        } else if (d.type === 'income') {
+                            totalIncome += d.amount;
+                            html += `<tr><td>${d.date}</td><td style="color:#38A169; font-weight:600;">🟢 รายรับ</td><td style="color:#38A169; font-weight:600;">+ ฿${formattedAmount}</td><td>${d.note}</td><td><button class="btn-delete" onclick="confirmDelete('cashbook', '${d.id}', '${d.note}')">🗑️</button></td></tr>`;
+                        } else {
+                            totalExpense += d.amount;
+                            html += `<tr><td>${d.date}</td><td style="color:#E53E3E; font-weight:600;">🔴 รายจ่าย</td><td style="color:#E53E3E; font-weight:600;">- ฿${formattedAmount}</td><td>${d.note}</td><td><button class="btn-delete" onclick="confirmDelete('cashbook', '${d.id}', '${d.note}')">🗑️</button></td></tr>`;
+                        }
+                    });
+
+                    if (tb) tb.innerHTML = items.length === 0 ? '<tr><td colspan="5" align="center">ยังไม่มีประวัติการบันทึกสมุดเงินสดภายนอก</td></tr>' : html;
+                    
+                    // สรุปยอดเงินคำนวณพ่นลง DOM อย่างปลอดภัย
+                    updateDOM('cash-total-asset', totalAsset.toLocaleString(undefined, {minimumFractionDigits: 2}));
+                    updateDOM('cash-total-income', totalIncome.toLocaleString(undefined, {minimumFractionDigits: 2}));
+                    updateDOM('cash-total-expense', totalExpense.toLocaleString(undefined, {minimumFractionDigits: 2}));
+                    
+                    const balance = totalAsset + totalIncome - totalExpense;
+                    const balanceEl = document.getElementById('cash-balance');
+                    if (balanceEl) {
+                        balanceEl.innerText = balance.toLocaleString(undefined, {minimumFractionDigits: 2});
+                        balanceEl.style.color = balance >= 0 ? '#3182CE' : '#E53E3E';
+                    }
+                });
+            } catch(e) { console.error("Cashbook system crashed:", e); }
+        })();
+    </script>
+</body>
+</html>
